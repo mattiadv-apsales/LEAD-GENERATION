@@ -1,0 +1,108 @@
+* {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+    font-family: sans-serif;
+    color: white;
+}
+
+body {
+    background: rgba(0, 0, 0, 0.904);
+}
+
+.container {
+    width: 90%;
+    margin: 0 auto;
+    padding: 20px;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.no-color {
+    background: none !important;
+    color: white !important;
+    flex-direction: column !important;
+}
+
+h1 {
+    color: rgba(0, 0, 0, 0.904) !important;
+}
+
+.subcontainer {
+    width: 100%;
+    background: white;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    padding: 20px;
+    border-radius: 6px;
+    color: rgba(0, 0, 0, 0.904) !important;
+    gap: 10px;
+}
+
+.Leads_container {
+    padding: 20px;
+    width: 100%;
+    min-height: 300px;
+    background: red;
+    border-radius: 6px;
+}
+
+input {
+    padding: 15px;
+    border-radius: 6px;
+    background: none;
+    color: rgba(255, 0, 0, 0.726);
+    border: 1px solid rgba(255, 0, 0, 0.726);
+    transition: 0.4s;
+    outline: none;
+    font-size: 14px;
+    min-width: 300px;
+    max-width: 300px;
+}
+
+input:hover {
+    box-shadow: 0px 4px 16px rgba(255, 0, 0, 0.726);
+}
+
+input:focus {
+    box-shadow: 0px 4px 16px rgba(255, 0, 0, 0.726);
+}
+
+button {
+    padding: 15px;
+    border-radius: 6px;
+    background: rgba(255, 0, 0, 0.726);
+    color: white;
+    border: 1px solid rgba(255, 0, 0, 0.726);
+    transition: 0.4s;
+    outline: none;
+    font-size: 14px;
+    min-width: 200px;
+    max-width: 200px;
+    font-weight: 600;
+    transition: 0.4s;
+    cursor: pointer;
+}
+
+button:hover {
+    background: none;
+    color: rgba(255, 0, 0, 0.726);
+}
+
+li {
+    list-style: none;
+    padding: 20px;
+    border: 1px solid white;
+    border-radius: 6px;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    flex-direction: column;
+    gap: 10px;
+    box-shadow: 0px 4px 16px white;
+}
