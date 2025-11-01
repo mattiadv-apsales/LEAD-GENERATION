@@ -346,33 +346,3 @@ async def get_real_leads(query: str) -> List[Dict]:
     
     print(f"[DEBUG] Scraping completato: {len(leads)} leads")
     return leads
-
-# ---------------- TEST ----------------
-if __name__ == "__main__":
-    async def test():
-        import time
-        start = time.time()
-        
-        query = "fitness"
-        print(f"\n{'='*60}")
-        print(f"TEST QUERY: {query}")
-        print(f"{'='*60}\n")
-        
-        leads = await get_real_leads(query)
-        
-        elapsed = time.time() - start
-        print(f"\n{'='*60}")
-        print(f"RISULTATI:")
-        print(f"{'='*60}")
-        print(f"Tempo totale: {elapsed:.2f}s")
-        print(f"Leads trovati: {len(leads)}\n")
-        
-        for i, lead in enumerate(leads, 1):
-            print(f"Lead #{i}:")
-            print(f"  Landing: {lead['landing_page']}")
-            print(f"  Ad Link: {lead['ad_link']}")
-            print(f"  Email: {lead['email']}")
-            print(f"  Telefono: {lead['telefono']}")
-            print(f"  Copy: {lead['copy_valutazione']}\n")
-    
-    asyncio.run(test())
