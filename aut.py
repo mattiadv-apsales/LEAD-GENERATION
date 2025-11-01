@@ -14,7 +14,7 @@ EXCLUDE_DOMAINS = [
 
 # Performance tuning
 MAX_CONCURRENT_PAGES = 5
-SCROLL_COUNT = 10
+SCROLL_COUNT = 3
 SCROLL_WAIT = 1000
 PAGE_TIMEOUT = 10000
 INITIAL_WAIT = 3000
@@ -83,7 +83,8 @@ def validate_phone(phone: str) -> bool:
     
     return True
 
-async def get_real_landing_urls(query: str) -> List[str]:
+async def get_real_landing_urls(query: str) -> List[Dict[str, str]]:
+    """Ritorna lista di dict con url e ad_link"""
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context()
@@ -92,68 +93,144 @@ async def get_real_landing_urls(query: str) -> List[str]:
         search_url = f"https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country={COUNTRY}&q={query.replace(' ', '%20')}"
         print(f"[DEBUG] Apertura Meta Ads Library: {search_url}")
         
-        await page.goto(search_url)
+        await page.goto(search_url, wait_until="networkidle")
         await page.wait_for_timeout(INITIAL_WAIT)
+        
+        # Aspetta che si carichino gli ads
+        try:
+            await page.wait_for_selector('a[href*="l.facebook.com"]', timeout=5000)
+            print("[DEBUG] Ads caricati")
+        except:
+            print("[DEBUG] Timeout caricamento ads, continuo comunque...")
 
         for i in range(SCROLL_COUNT):
             await page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
             await page.wait_for_timeout(SCROLL_WAIT)
             print(f"[DEBUG] Scroll {i+1}/{SCROLL_COUNT}")
+        
+        # Screenshot per debug (opzionale)
+        # await page.screenshot(path="debug_ads_library.png")
+        # print("[DEBUG] Screenshot salvato: debug_ads_library.png")
 
-        raw_links = await page.evaluate("""
+        # Estrai link ads e landing pages insieme
+        ads_data = await page.evaluate("""
             () => {
-                const links = Array.from(document.querySelectorAll('a[href]'));
-                return links.map(a => a.href).filter(href => 
-                    href.includes('l.facebook.com/l.php?u=') || href.includes('fb.me/')
-                );
+                const results = [];
+                
+                // Cerca tutti i link che vanno a landing pages
+                const allLinks = Array.from(document.querySelectorAll('a[href]'));
+                
+                allLinks.forEach(link => {
+                    const href = link.href;
+                    
+                    // Se è un link a landing page
+                    if (href.includes('l.facebook.com/l.php?u=') || href.includes('fb.me/')) {
+                        // Cerca il link dell'ads in vari modi
+                        let adUrl = null;
+                        let parent = link.parentElement;
+                        let levels = 0;
+                        
+                        // Metodo 1: Cerca link con ?id= nel parent
+                        while (parent && levels < 15) {
+                            // Cerca tutti i link nel parent
+                            const linksInParent = parent.querySelectorAll('a[href*="facebook.com/ads/library"]');
+                            for (let adLink of linksInParent) {
+                                if (adLink.href.includes('?id=')) {
+                                    adUrl = adLink.href;
+                                    break;
+                                }
+                            }
+                            
+                            if (adUrl) break;
+                            
+                            // Metodo 2: Cerca data-ad-id o altri attributi
+                            if (parent.hasAttribute('data-ad-id')) {
+                                const adId = parent.getAttribute('data-ad-id');
+                                adUrl = `https://www.facebook.com/ads/library/?id=${adId}`;
+                                break;
+                            }
+                            
+                            parent = parent.parentElement;
+                            levels++;
+                        }
+                        
+                        // Se non trova niente, cerca il testo "See ad details" o "Vedi dettagli inserzione"
+                        if (!adUrl && link.parentElement) {
+                            const container = link.closest('div[role="article"]') || link.closest('[data-pagelet]');
+                            if (container) {
+                                const detailsLinks = container.querySelectorAll('a');
+                                for (let dl of detailsLinks) {
+                                    const text = dl.textContent.toLowerCase();
+                                    if ((text.includes('see') && text.includes('detail')) || 
+                                        (text.includes('vedi') && text.includes('dettagli'))) {
+                                        adUrl = dl.href;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        results.push({
+                            landing: href,
+                            ad_url: adUrl
+                        });
+                    }
+                });
+                
+                return results;
             }
         """)
 
-        print(f"[DEBUG] Trovati {len(raw_links)} link potenziali")
+        print(f"[DEBUG] Trovati {len(ads_data)} link potenziali con ads")
+        
+        # Debug: conta quanti hanno ad_url
+        with_ad = sum(1 for item in ads_data if item['ad_url'])
+        without_ad = len(ads_data) - with_ad
+        print(f"[DEBUG] Con ad link: {with_ad} | Senza ad link: {without_ad}")
+        
+        # Debug: mostra primi 3 risultati
+        for i, item in enumerate(ads_data[:3]):
+            landing_preview = item['landing'][:80] + "..." if len(item['landing']) > 80 else item['landing']
+            ad_preview = (item['ad_url'][:80] + "...") if item['ad_url'] and len(item['ad_url']) > 80 else (item['ad_url'] or 'None')
+            print(f"[DEBUG] Esempio {i+1}:")
+            print(f"  Landing: {landing_preview}")
+            print(f"  Ad URL: {ad_preview}")
 
         landing_pages = []
         seen_urls: Set[str] = set()
-        direct_urls = []
-        shortlinks = []
         
-        for link in raw_links:
-            if "l.facebook.com/l.php?u=" in link:
-                real_url = extract_real_url(link)
-                if real_url:
-                    direct_urls.append(real_url)
+        for item in ads_data:
+            landing_link = item['landing']
+            ad_url = item['ad_url']
+            
+            real_url = None
+            
+            if "l.facebook.com/l.php?u=" in landing_link:
+                real_url = extract_real_url(landing_link)
             else:
-                shortlinks.append(link)
-        
-        for url in direct_urls:
-            norm_url = normalize_url(url)
-            if not should_exclude_url(norm_url) and norm_url not in seen_urls:
-                landing_pages.append(norm_url)
-                seen_urls.add(norm_url)
-                print(f"[DEBUG] Landing page trovata (diretta): {norm_url}")
-
-        semaphore = asyncio.Semaphore(MAX_CONCURRENT_PAGES)
-        
-        async def resolve_with_limit(link):
-            async with semaphore:
-                return await resolve_shortlink(context, link)
-        
-        resolved = await asyncio.gather(*[resolve_with_limit(link) for link in shortlinks])
-        
-        for url in resolved:
-            if url:
-                norm_url = normalize_url(url)
+                # Shortlink
+                real_url = await resolve_shortlink(context, landing_link)
+            
+            if real_url:
+                norm_url = normalize_url(real_url)
                 if not should_exclude_url(norm_url) and norm_url not in seen_urls:
-                    landing_pages.append(norm_url)
+                    landing_pages.append({
+                        'url': norm_url,
+                        'ad_link': ad_url or 'Non disponibile'
+                    })
                     seen_urls.add(norm_url)
-                    print(f"[DEBUG] Landing page trovata (shortlink): {norm_url}")
+                    print(f"[DEBUG] Landing page trovata: {norm_url}")
+                    if ad_url:
+                        print(f"[DEBUG]   └─ Ad link: {ad_url}")
 
         await browser.close()
         return landing_pages
 
-async def scrape_single_lead(context, url: str) -> Dict:
+async def scrape_single_lead(context, url: str, ad_link: str) -> Dict:
     """Scrape singolo lead - da eseguire in parallelo"""
     lead = {
         "landing_page": url,
+        "ad_link": ad_link,
         "email": None,
         "telefono": None,
         "copy_valutazione": None
@@ -245,13 +322,13 @@ async def scrape_single_lead(context, url: str) -> Dict:
     return lead
 
 async def get_real_leads(query: str) -> List[Dict]:
-    landing_urls = await get_real_landing_urls(query)
+    landing_data = await get_real_landing_urls(query)
     
-    if not landing_urls:
+    if not landing_data:
         print("[DEBUG] Nessuna landing page trovata")
         return []
     
-    print(f"[DEBUG] Inizio scraping di {len(landing_urls)} landing pages...")
+    print(f"[DEBUG] Inizio scraping di {len(landing_data)} landing pages...")
     
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
@@ -259,11 +336,11 @@ async def get_real_leads(query: str) -> List[Dict]:
         
         semaphore = asyncio.Semaphore(MAX_CONCURRENT_PAGES)
         
-        async def scrape_with_limit(url):
+        async def scrape_with_limit(data):
             async with semaphore:
-                return await scrape_single_lead(context, url)
+                return await scrape_single_lead(context, data['url'], data['ad_link'])
         
-        leads = await asyncio.gather(*[scrape_with_limit(url) for url in landing_urls])
+        leads = await asyncio.gather(*[scrape_with_limit(data) for data in landing_data])
         
         await browser.close()
     
@@ -293,6 +370,7 @@ if __name__ == "__main__":
         for i, lead in enumerate(leads, 1):
             print(f"Lead #{i}:")
             print(f"  Landing: {lead['landing_page']}")
+            print(f"  Ad Link: {lead['ad_link']}")
             print(f"  Email: {lead['email']}")
             print(f"  Telefono: {lead['telefono']}")
             print(f"  Copy: {lead['copy_valutazione']}\n")
