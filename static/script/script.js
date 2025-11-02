@@ -10,8 +10,15 @@ search.addEventListener("click", function() {
 
     // Loading state
     search.disabled = true;
-    search.textContent = 'Ricerca in corso...';
-    output.innerHTML = '<div style="text-align: center; padding: 40px; color: #ff6666;">🔍 Ricerca leads in corso...</div>';
+    search.classList.add('loading');
+    
+    output.innerHTML = `
+        <div class="loading-state">
+            <div class="big-loader"></div>
+            <h3>Ricerca in corso<span class="loading-dots"></span></h3>
+            <p>Stiamo analizzando gli annunci su Meta Ads Library</p>
+        </div>
+    `;
 
     fetch("/add_leads", {
         method: "POST",
@@ -24,10 +31,10 @@ search.addEventListener("click", function() {
     .then(data => {
         // Reset button
         search.disabled = false;
-        search.textContent = 'Research lead';
+        search.classList.remove('loading');
 
         if (data.error) {
-            output.innerHTML = `<div style="text-align: center; padding: 40px; color: rgba(255, 255, 255, 0.5);">${data.error}</div>`;
+            output.innerHTML = `<div class="empty-state">${data.error}</div>`;
         } else {
             // Clear container
             output.innerHTML = '';
@@ -39,9 +46,9 @@ search.addEventListener("click", function() {
                 
                 // Determina classe badge
                 let badgeClass = '';
-                if (lead.copy_valutazione === 'Copy molto interessante') {
+                if (lead.copy_valutazione && lead.copy_valutazione.includes('molto interessante')) {
                     badgeClass = 'very-interesting';
-                } else if (lead.copy_valutazione === 'Copy interessante') {
+                } else if (lead.copy_valutazione && lead.copy_valutazione.includes('interessante')) {
                     badgeClass = 'interesting';
                 }
                 
@@ -73,17 +80,7 @@ search.addEventListener("click", function() {
                         </div>
                         <div class="lead-info-item">
                             <strong>✍️ Valutazione copy</strong>
-                            <span class="copy-badge ${badgeClass}">${lead.copy_valutazione}</span>
-                        </div>
-                    </div>
-                    <div class="lead-status-bar">
-                        <div class="status-indicator ${hasEmail ? 'active' : 'inactive'}">
-                            <span class="status-dot"></span>
-                            <span>Email</span>
-                        </div>
-                        <div class="status-indicator ${hasPhone ? 'active' : 'inactive'}">
-                            <span class="status-dot"></span>
-                            <span>Telefono</span>
+                            <span class="copy-badge ${badgeClass}">${lead.copy_valutazione || 'N/A'}</span>
                         </div>
                     </div>
                 `;
@@ -93,7 +90,14 @@ search.addEventListener("click", function() {
     })
     .catch(err => {
         search.disabled = false;
-        search.textContent = 'Research lead';
-        output.innerHTML = `<div style="text-align: center; padding: 40px; color: #ff3333;">❌ Errore: ${err}</div>`;
+        search.classList.remove('loading');
+        output.innerHTML = `<div class="error-state">❌ Errore: ${err}</div>`;
     });
+});
+
+// Enter key support
+query.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter' && !search.disabled) {
+        search.click();
+    }
 });
